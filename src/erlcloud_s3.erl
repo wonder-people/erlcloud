@@ -726,7 +726,7 @@ s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers) -
         end,
     RequestURI = lists:flatten([
         Config#aws_config.s3_prot,
-		"://",
+        "://",
         case Host of "" -> ""; _ -> [Host, $.] end,
         Config#aws_config.s3_host, port_spec(Config),
         EscapedPath,

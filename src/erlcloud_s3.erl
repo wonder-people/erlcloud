@@ -1,7 +1,7 @@
 %% Amazon Simple Storage Service (S3)
 
 -module(erlcloud_s3).
--export([new/2, new/3, new/4, configure/2, configure/3, configure/4,
+-export([new/2, new/3, new/4, new/5, configure/2, configure/3, configure/4, configure/5,
          create_bucket/1, create_bucket/2, create_bucket/3,
          delete_bucket/1, delete_bucket/2,
          get_bucket_attribute/2, get_bucket_attribute/3,
@@ -52,6 +52,17 @@ new(AccessKeyID, SecretAccessKey, Host, Port) ->
      s3_port=Port
     }.
 
+-spec new(string(), string(), string(), non_neg_integer(), string()) -> aws_config().
+
+new(AccessKeyID, SecretAccessKey, Host, Port, Protocol) ->
+    #aws_config{
+     access_key_id=AccessKeyID,
+     secret_access_key=SecretAccessKey,
+     s3_host=Host,
+     s3_port=Port,
+     s3_prot=Protocol
+    }.
+
 -spec configure(string(), string()) -> ok.
 
 configure(AccessKeyID, SecretAccessKey) ->
@@ -68,6 +79,10 @@ configure(AccessKeyID, SecretAccessKey, Host) ->
 
 configure(AccessKeyID, SecretAccessKey, Host, Port) ->
     put(aws_config, new(AccessKeyID, SecretAccessKey, Host, Port)),
+    ok.
+
+configure(AccessKeyID, SecretAccessKey, Host, Port, Protocol) ->
+    put(aws_config, new(AccessKeyID, SecretAccessKey, Host, Port, Protocol)),
     ok.
 
 -type s3_bucket_attribute_name() :: acl
@@ -155,7 +170,7 @@ create_bucket(BucketName, ACL, LocationConstraint, Config)
                   _       -> [{"x-amz-acl", encode_acl(ACL)}]
               end,
     POSTData = case LocationConstraint of
-                   none -> <<>>;
+                   none -> {<<>>, "application/octet-stream"};
                    Location when Location =:= eu; Location =:= us_west_1 ->
                        LocationName = case Location of eu -> "EU"; us_west_1 -> "us-west-1" end,
                        XML = {'CreateBucketConfiguration', [{xmlns, ?XMLNS_S3}],
@@ -710,7 +725,8 @@ s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers) -
             _ -> [{"content-md5", binary_to_list(ContentMD5)}]
         end,
     RequestURI = lists:flatten([
-        "https://",
+        Config#aws_config.s3_prot,
+		"://",
         case Host of "" -> ""; _ -> [Host, $.] end,
         Config#aws_config.s3_host, port_spec(Config),
         EscapedPath,

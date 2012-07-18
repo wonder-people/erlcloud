@@ -382,13 +382,13 @@ get_object(BucketName, Key, Options, Config) ->
                       undefined -> "";
                       Version   -> ["versionId=", Version]
                   end,
-    {Headers, Body} = s3_request(Config, get, BucketName, [$/|Key], Subresource, [], <<>>, RequestHeaders),
+    {Headers, Body} = s3_request(Config, get, BucketName, [$/|Key], Subresource, [], <<>>, RequestHeaders, [{body_format, binary}]),
     [{etag, proplists:get_value("etag", Headers)},
      {content_length, proplists:get_value("content-length", Headers)},
      {content_type, proplists:get_value("content-type", Headers)},
      {delete_marker, list_to_existing_atom(proplists:get_value("x-amz-delete-marker", Headers, "false"))},
      {version_id, proplists:get_value("x-amz-version-id", Headers, "null")},
-     {content, list_to_binary(Body)}|
+     {content, Body}|
      extract_metadata(Headers)].
 
 -spec get_object_acl(string(), string()) -> proplist().
@@ -462,10 +462,10 @@ get_object_torrent(BucketName, Key) ->
 -spec get_object_torrent(string(), string(), aws_config()) -> proplist().
 
 get_object_torrent(BucketName, Key, Config) ->
-    {Headers, Body} = s3_request(Config, get, BucketName, [$/|Key], "torrent", [], <<>>, []),
+    {Headers, Body} = s3_request(Config, get, BucketName, [$/|Key], "torrent", [], <<>>, [], [{body_format, binary}]),
     [{delete_marker, list_to_existing_atom(proplists:get_value("x-amz-delete-marker", Headers, "false"))},
      {version_id, proplists:get_value("x-amz-delete-marker", Headers, "false")},
-     {torrent, list_to_binary(Body)}].
+     {torrent, Body}].
 
 -spec list_object_versions(string()) -> proplist().
 
@@ -709,6 +709,9 @@ s3_xml_request(Config, Method, Host, Path, Subresource, Params, POSTData, Header
     end.
 
 s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers) ->
+	s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers, []).
+
+s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers, GetOptions) ->
     {ContentMD5, ContentType, Body} =
         case POSTData of
             {PD, CT} -> {base64:encode(crypto:md5(PD)), CT, PD}; PD -> {"", "", PD}
@@ -738,7 +741,7 @@ s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers) -
         end
     ]),
     Response = case Method of
-        get -> httpc:request(Method, {RequestURI, RequestHeaders}, [], []);
+        get -> httpc:request(Method, {RequestURI, RequestHeaders}, [], GetOptions);
         delete -> httpc:request(Method, {RequestURI, RequestHeaders}, [], []);
         _ -> httpc:request(Method, {RequestURI, RequestHeaders, ContentType, Body}, [], [])
     end,

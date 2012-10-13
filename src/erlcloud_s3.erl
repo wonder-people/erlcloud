@@ -374,6 +374,7 @@ get_object(BucketName, Key, Options) ->
 
 get_object(BucketName, Key, Options, Config) ->
     RequestHeaders = [{"Range", proplists:get_value(range, Options)},
+                      {"Accept", proplists:get_value(accept, Options)},
                       {"If-Modified-Since", proplists:get_value(if_modified_since, Options)},
                       {"If-Unmodified-Since", proplists:get_value(if_unmodified_since, Options)},
                       {"If-Match", proplists:get_value(if_match, Options)},

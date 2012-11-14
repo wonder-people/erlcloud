@@ -564,10 +564,16 @@ put_object(BucketName, Key, Value, Options, HTTPHeaders, Config)
         ++ [{["x-amz-meta-"|string:to_lower(MKey)], MValue} ||
                {MKey, MValue} <- proplists:get_value(meta, Options, [])],
     ContentType = proplists:get_value("content-type", HTTPHeaders, "application/octet_stream"),
+    ReturnResponse = proplists:get_value(return_response, Options, false),
     POSTData = {iolist_to_binary(Value), ContentType},
-    {Headers, _Body} = s3_request(Config, put, BucketName, [$/|Key], "", [],
+    {Headers, Body} = s3_request(Config, put, BucketName, [$/|Key], "", [],
                                   POSTData, RequestHeaders),
-    [{version_id, proplists:get_value("x-amz-version-id", Headers, "null")}].
+    case ReturnResponse of
+        true ->
+            {Headers, Body};
+        false ->
+            [{version_id, proplists:get_value("x-amz-version-id", Headers, "null")}]
+    end.
 
 -spec set_object_acl(string(), string(), proplist()) -> ok.
 

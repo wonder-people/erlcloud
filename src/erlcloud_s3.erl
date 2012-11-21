@@ -1,7 +1,8 @@
 %% Amazon Simple Storage Service (S3)
 
 -module(erlcloud_s3).
--export([new/2, new/3, new/4, new/5, configure/2, configure/3, configure/4, configure/5,
+-export([new/2, new/3, new/4, new/5, new/7,
+         configure/2, configure/3, configure/4, configure/5, configure/7,
          create_bucket/1, create_bucket/2, create_bucket/3,
          delete_bucket/1, delete_bucket/2,
          get_bucket_attribute/2, get_bucket_attribute/3,
@@ -25,7 +26,6 @@
 -include_lib("xmerl/include/xmerl.hrl").
 
 -spec new(string(), string()) -> aws_config().
-
 new(AccessKeyID, SecretAccessKey) ->
     #aws_config{
      access_key_id=AccessKeyID,
@@ -33,7 +33,6 @@ new(AccessKeyID, SecretAccessKey) ->
     }.
 
 -spec new(string(), string(), string()) -> aws_config().
-
 new(AccessKeyID, SecretAccessKey, Host) ->
     #aws_config{
      access_key_id=AccessKeyID,
@@ -43,7 +42,6 @@ new(AccessKeyID, SecretAccessKey, Host) ->
 
 
 -spec new(string(), string(), string(), non_neg_integer()) -> aws_config().
-
 new(AccessKeyID, SecretAccessKey, Host, Port) ->
     #aws_config{
      access_key_id=AccessKeyID,
@@ -53,7 +51,6 @@ new(AccessKeyID, SecretAccessKey, Host, Port) ->
     }.
 
 -spec new(string(), string(), string(), non_neg_integer(), string()) -> aws_config().
-
 new(AccessKeyID, SecretAccessKey, Host, Port, Protocol) ->
     #aws_config{
      access_key_id=AccessKeyID,
@@ -63,26 +60,65 @@ new(AccessKeyID, SecretAccessKey, Host, Port, Protocol) ->
      s3_prot=Protocol
     }.
 
--spec configure(string(), string()) -> ok.
+-spec new(string(),
+          string(),
+          string(),
+          non_neg_integer(),
+          string(),
+          string(),
+          non_neg_integer()) -> aws_config().
+new(AccessKeyID, SecretAccessKey, Host, Port, Protocol, ProxyHost, ProxyPort) ->
+    #aws_config{
+     access_key_id=AccessKeyID,
+     secret_access_key=SecretAccessKey,
+     s3_host=Host,
+     s3_port=Port,
+     s3_prot=Protocol,
+     proxy_host=ProxyHost,
+     proxy_port=ProxyPort
+    }.
 
+-spec configure(string(), string()) -> ok.
 configure(AccessKeyID, SecretAccessKey) ->
     put(aws_config, new(AccessKeyID, SecretAccessKey)),
     ok.
 
 -spec configure(string(), string(), string()) -> ok.
-
 configure(AccessKeyID, SecretAccessKey, Host) ->
     put(aws_config, new(AccessKeyID, SecretAccessKey, Host)),
     ok.
 
 -spec configure(string(), string(), string(), non_neg_integer()) -> ok.
-
 configure(AccessKeyID, SecretAccessKey, Host, Port) ->
     put(aws_config, new(AccessKeyID, SecretAccessKey, Host, Port)),
     ok.
 
+-spec configure(string(), string(), string(), non_neg_integer(), string()) -> ok.
 configure(AccessKeyID, SecretAccessKey, Host, Port, Protocol) ->
     put(aws_config, new(AccessKeyID, SecretAccessKey, Host, Port, Protocol)),
+    ok.
+
+-spec configure(string(),
+                string(),
+                string(),
+                non_neg_integer(),
+                string(),
+                string(),
+                non_neg_integer()) -> aws_config().
+configure(AccessKeyID,
+          SecretAccessKey,
+          Host,
+          Port,
+          Protocol,
+          ProxyHost,
+          ProxyPort) ->
+    put(aws_config, new(AccessKeyID,
+                        SecretAccessKey,
+                        Host,
+                        Port,
+                        Protocol,
+                        ProxyHost,
+                        ProxyPort)),
     ok.
 
 -type s3_bucket_attribute_name() :: acl
@@ -567,7 +603,7 @@ put_object(BucketName, Key, Value, Options, HTTPHeaders, Config)
     ReturnResponse = proplists:get_value(return_response, Options, false),
     POSTData = {iolist_to_binary(Value), ContentType},
     {Headers, Body} = s3_request(Config, put, BucketName, [$/|Key], "", [],
-                                  POSTData, RequestHeaders),
+                                 POSTData, RequestHeaders),
     case ReturnResponse of
         true ->
             {Headers, Body};
@@ -716,7 +752,7 @@ s3_xml_request(Config, Method, Host, Path, Subresource, Params, POSTData, Header
     end.
 
 s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers) ->
-	s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers, []).
+    s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers, []).
 
 s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers, GetOptions) ->
     {ContentMD5, ContentType, Body} =
@@ -727,7 +763,7 @@ s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers, G
     Date = httpd_util:rfc1123_date(erlang:localtime()),
     EscapedPath = erlcloud_http:url_encode_loose(Path),
     Authorization = make_authorization(Config, Method, ContentMD5, ContentType,
-        Date, AmzHeaders, Host, EscapedPath, Subresource),
+                                       Date, AmzHeaders, Host, EscapedPath, Subresource),
     FHeaders = [Header || {_, Value} = Header <- Headers, Value =/= undefined],
     RequestHeaders = [{"date", Date}, {"authorization", Authorization}|FHeaders] ++
         case ContentMD5 of
@@ -735,23 +771,24 @@ s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers, G
             _ -> [{"content-md5", binary_to_list(ContentMD5)}]
         end,
     RequestURI = lists:flatten([
-        Config#aws_config.s3_prot,
-        "://",
-        case Host of "" -> ""; _ -> [Host, $.] end,
-        Config#aws_config.s3_host, port_spec(Config),
-        EscapedPath,
-        case Subresource of "" -> ""; _ -> [$?, Subresource] end,
-        if
-            Params =:= [] -> "";
-            Subresource =:= "" -> [$?, erlcloud_http:make_query_string(Params)];
-            true -> [$&, erlcloud_http:make_query_string(Params)]
-        end
-    ]),
+                                Config#aws_config.s3_prot,
+                                "://",
+                                case Host of "" -> ""; _ -> [Host, $.] end,
+                                Config#aws_config.s3_host, port_spec(Config),
+                                EscapedPath,
+                                case Subresource of "" -> ""; _ -> [$?, Subresource] end,
+                                if
+                                    Params =:= [] -> "";
+                                    Subresource =:= "" -> [$?, erlcloud_http:make_query_string(Params)];
+                                    true -> [$&, erlcloud_http:make_query_string(Params)]
+                                end
+                               ]),
+    httpc:set_options(options_list(Config)),
     Response = case Method of
-        get -> httpc:request(Method, {RequestURI, RequestHeaders}, [], GetOptions);
-        delete -> httpc:request(Method, {RequestURI, RequestHeaders}, [], []);
-        _ -> httpc:request(Method, {RequestURI, RequestHeaders, ContentType, Body}, [], [])
-    end,
+                   get -> httpc:request(Method, {RequestURI, RequestHeaders}, [], GetOptions);
+                   delete -> httpc:request(Method, {RequestURI, RequestHeaders}, [], []);
+                   _ -> httpc:request(Method, {RequestURI, RequestHeaders, ContentType, Body}, [], [])
+               end,
     case Response of
         {ok, {{_HTTPVer, OKStatus, _StatusLine}, ResponseHeaders, ResponseBody}}
           when OKStatus >= 200, OKStatus =< 299 ->
@@ -761,6 +798,18 @@ s3_request(Config, Method, Host, Path, Subresource, Params, POSTData, Headers, G
         {error, Error} ->
             erlang:error({aws_error, {socket_error, Error}})
     end.
+
+options_list(#aws_config{proxy_host="", proxy_port=0}) ->
+    [];
+options_list(#aws_config{proxy_host="", proxy_port=ProxyPort, s3_host=S3Host}) ->
+    ProxyOption = {proxy, {{S3Host, ProxyPort}, []}},
+    [ProxyOption];
+options_list(#aws_config{proxy_host=ProxyHost, proxy_port=0}) ->
+    ProxyOption = {proxy, {{ProxyHost, 80}, []}},
+    [ProxyOption];
+options_list(#aws_config{proxy_host=ProxyHost, proxy_port=ProxyPort}) ->
+    ProxyOption = {proxy, {{ProxyHost, ProxyPort}, []}},
+    [ProxyOption].
 
 make_authorization(Config, Method, ContentMD5, ContentType, Date, AmzHeaders,
                    Host, Resource, Subresource) ->

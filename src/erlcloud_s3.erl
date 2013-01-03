@@ -659,7 +659,7 @@ set_bucket_attribute(BucketName, AttributeName, Value) ->
 
 set_bucket_attribute(BucketName, AttributeName, Value, Config)
   when is_list(BucketName) ->
-    {Subresource, XML} =
+    {Subresource, ContentType, POSTData} =
         case AttributeName of
             acl ->
                 ACLXML = {'AccessControlPolicy',
@@ -667,7 +667,7 @@ set_bucket_attribute(BucketName, AttributeName, Value, Config)
                             [{'ID', [proplists:get_value(id, proplists:get_value(owner, Value))]},
                              {'DisplayName', [proplists:get_value(display_name, proplists:get_value(owner, Value))]}]},
                            {'AccessControlList', encode_grants(proplists:get_value(access_control_list, Value))}]},
-                {"acl", ACLXML};
+                {"acl", "application/xml", encode_xml_request(ACLXML)};
             logging ->
                 LoggingXML = {'BucketLoggingStatus',
                               [{xmlns, ?XMLNS_S3}],
@@ -683,7 +683,7 @@ set_bucket_attribute(BucketName, AttributeName, Value, Config)
                                   false ->
                                       []
                               end},
-                {"logging", LoggingXML};
+                {"logging", "application/xml", encode_xml_request(LoggingXML)};
             request_payment ->
                 PayerName = case Value of
                                 requester -> "Requester";
@@ -694,7 +694,7 @@ set_bucket_attribute(BucketName, AttributeName, Value, Config)
                           {'Payer', [PayerName]}
                          ]
                         },
-                {"requestPayment", RPXML};
+                {"requestPayment", "application/xml", encode_xml_request(RPXML)};
             versioning ->
                 Status = case proplists:get_value(status, Value) of
                              suspended -> "Suspended";
@@ -707,11 +707,17 @@ set_bucket_attribute(BucketName, AttributeName, Value, Config)
                 VersioningXML = {'VersioningConfiguration', [{xmlns, ?XMLNS_S3}],
                                  [{'Status', [Status]},
                                   {'MfaDelete', [MFADelete]}]},
-                {"versioning", VersioningXML}
+                {"versioning", "application/xml", encode_xml_request(VersioningXML)};
+            policy ->
+                PolicyJSON = erlcloud_bucket_policy:term_to_json(Value),
+                {"policy", "application/json", PolicyJSON}
         end,
-    POSTData = list_to_binary(xmerl:export_simple([XML], xmerl_xml)),
-    Headers = [{"content-type", "application/xml"}],
+    Headers = [{"content-type", ContentType}],
     s3_simple_request(Config, put, BucketName, "/", Subresource, [], POSTData, Headers).
+
+-spec encode_xml_request(term()) -> binary().
+encode_xml_request(Data) ->
+    list_to_binary(xmerl:export_simple([Data], xmerl_xml)).
 
 encode_grants(Grants) ->
     [encode_grant(Grant) || Grant <- Grants].

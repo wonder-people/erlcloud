@@ -1,8 +1,8 @@
 %% Amazon Simple Storage Service (S3)
 
 -module(erlcloud_s3).
--export([new/2, new/3, new/4, new/5, new/7,
-         configure/2, configure/3, configure/4, configure/5, configure/7,
+-export([new/2, new/3, new/4, new/5, new/8,
+         configure/2, configure/3, configure/4, configure/5, configure/8,
          create_bucket/1, create_bucket/2, create_bucket/3,
          delete_bucket/1, delete_bucket/2,
          get_bucket_attribute/2, get_bucket_attribute/3,
@@ -68,16 +68,17 @@ new(AccessKeyID, SecretAccessKey, Host, Port, Protocol) ->
           non_neg_integer(),
           string(),
           string(),
-          non_neg_integer()) -> aws_config().
-new(AccessKeyID, SecretAccessKey, Host, Port, Protocol, ProxyHost, ProxyPort) ->
+          non_neg_integer(),
+          proplist()) -> aws_config().
+new(AccessKeyID, SecretAccessKey, Host, Port, Protocol, ProxyHost, ProxyPort,
+    HttpOptions) ->
     #aws_config{
      access_key_id=AccessKeyID,
      secret_access_key=SecretAccessKey,
      s3_host=Host,
      s3_port=Port,
      s3_prot=Protocol,
-     proxy_host=ProxyHost,
-     proxy_port=ProxyPort
+     http_options=[{proxy, {{ProxyHost, ProxyPort}, []}}] ++ HttpOptions
     }.
 
 -spec configure(string(), string()) -> ok.
@@ -106,21 +107,24 @@ configure(AccessKeyID, SecretAccessKey, Host, Port, Protocol) ->
                 non_neg_integer(),
                 string(),
                 string(),
-                non_neg_integer()) -> ok.
+                non_neg_integer(),
+                proplist()) -> ok.
 configure(AccessKeyID,
           SecretAccessKey,
           Host,
           Port,
           Protocol,
           ProxyHost,
-          ProxyPort) ->
+          ProxyPort,
+          HTTPOptions) ->
     put(aws_config, new(AccessKeyID,
                         SecretAccessKey,
                         Host,
                         Port,
                         Protocol,
                         ProxyHost,
-                        ProxyPort)),
+                        ProxyPort,
+                        HTTPOptions)),
     ok.
 
 -type s3_bucket_attribute_name() :: acl
@@ -839,7 +843,7 @@ s3_request(Config, Method, Host, Path, Subresources, Params, POSTData, Headers, 
                                     true -> [$&, erlcloud_http:make_query_string(Params)]
                                 end
                                ]),
-    httpc:set_options(options_list(Config)),
+    httpc:set_options(Config#aws_config.http_options),
     Response = case Method of
                    get -> httpc:request(Method, {RequestURI, RequestHeaders}, [], GetOptions);
                    delete -> httpc:request(Method, {RequestURI, RequestHeaders}, [], []);
@@ -854,18 +858,6 @@ s3_request(Config, Method, Host, Path, Subresources, Params, POSTData, Headers, 
         {error, Error} ->
             erlang:error({aws_error, {socket_error, Error}})
     end.
-
-options_list(#aws_config{proxy_host="", proxy_port=0}) ->
-    [];
-options_list(#aws_config{proxy_host="", proxy_port=ProxyPort, s3_host=S3Host}) ->
-    ProxyOption = {proxy, {{S3Host, ProxyPort}, []}},
-    [ProxyOption];
-options_list(#aws_config{proxy_host=ProxyHost, proxy_port=0}) ->
-    ProxyOption = {proxy, {{ProxyHost, 80}, []}},
-    [ProxyOption];
-options_list(#aws_config{proxy_host=ProxyHost, proxy_port=ProxyPort}) ->
-    ProxyOption = {proxy, {{ProxyHost, ProxyPort}, []}},
-    [ProxyOption].
 
 make_authorization(Config, Method, ContentMD5, ContentType, Date, AmzHeaders,
                    Host, Resource, Subresources) ->

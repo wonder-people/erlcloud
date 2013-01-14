@@ -10,7 +10,6 @@
           mon_host="monitoring.amazonaws.com"::string(),
           access_key_id::string(),
           secret_access_key::string(),
-          proxy_host="" :: string(),
-          proxy_port=0 :: non_neg_integer()
+          http_options=[]::proplists:proplist()
 }).
 -type(aws_config() :: #aws_config{}).

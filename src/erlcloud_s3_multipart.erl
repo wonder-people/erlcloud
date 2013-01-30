@@ -20,8 +20,7 @@
          upload_id/1,
          upload_part/5,
          upload_part/6,
-         upload_parts/6,
-         uploads_to_term/1]).
+         upload_parts/6]).
 
 -include_lib("erlcloud/include/erlcloud.hrl").
 -include_lib("erlcloud/include/erlcloud_aws.hrl").
@@ -170,14 +169,6 @@ parts_to_term(Xml) ->
     Elements = filter_content_elements(Xml#xmlElement.content, ElementNames),
     parts_to_term(Elements, {[], [], [], []}).
 
-%% @doc Convert the response XML from a `List Multipart Uploads'
-%% request to an erlang term
--spec uploads_to_term(term()) -> term().
-uploads_to_term(Xml) ->
-    ElementNames = ['Bucket', 'Upload'],
-    Elements = filter_content_elements(Xml#xmlElement.content, ElementNames),
-    uploads_to_term(Elements, {[], []}).
-
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
@@ -308,32 +299,6 @@ part_element_to_term([Element | RestElements], {PartNum, _, Size}) when Element#
 part_element_to_term([Element | RestElements], {PartNum, Etag, _}) when Element#xmlElement.name =:= 'Size' ->
     Size = get_element_value(Element),
     part_element_to_term(RestElements, {PartNum, Etag, Size}).
-
--spec uploads_to_term([#xmlElement{}], {string(), [term()]}) -> proplist().
-uploads_to_term([], {Bucket, Uploads}) ->
-    [{bucket, Bucket}, {uploads, Uploads}];
-uploads_to_term([Element | RestElements], {_, Uploads}) when Element#xmlElement.name =:= 'Bucket' ->
-    Bucket = get_element_value(Element),
-    uploads_to_term(RestElements, {Bucket, Uploads});
-uploads_to_term([Element | RestElements], {Bucket, Uploads}) ->
-    UploadInfo = upload_element_to_term(Element),
-    uploads_to_term(RestElements, {Bucket, [UploadInfo | Uploads]}).
-
--spec upload_element_to_term(#xmlElement{}) -> {string(), proplist()}.
-upload_element_to_term(Element) ->
-    ElementNames = ['Key', 'UploadId'],
-    Elements = filter_content_elements(Element#xmlElement.content, ElementNames),
-    upload_element_to_term(Elements, {[], []}).
-
--spec upload_element_to_term([#xmlElement{}], {string(), string()}) -> {string(), proplist()}.
-upload_element_to_term([], {Key, UploadId}) ->
-    {UploadId, [{key, Key}]};
-upload_element_to_term([Element | RestElements], {_, UploadId}) when Element#xmlElement.name =:= 'Key' ->
-    Key = get_element_value(Element),
-    upload_element_to_term(RestElements, {Key, UploadId});
-upload_element_to_term([Element | RestElements], {Key, _}) when Element#xmlElement.name =:= 'UploadId' ->
-    UploadId = get_element_value(Element),
-    upload_element_to_term(RestElements, {Key, UploadId}).
 
 extract_uploads(Nodes) ->
     Attributes = [{key, "Key", text},

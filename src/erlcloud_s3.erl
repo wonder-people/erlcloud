@@ -311,7 +311,8 @@ list_objects(BucketName, Options, Config)
                   {delimiter, "Delimiter", text},
                   {max_keys, "MaxKeys", integer},
                   {is_truncated, "IsTruncated", boolean},
-                  {contents, "Contents", fun extract_contents/1}],
+                  {contents, "Contents", fun extract_contents/1},
+                  {common_prefixes, "CommonPrefixes", fun extract_common_prefixes/1}],
     erlcloud_xml:decode(Attributes, Doc).
 
 extract_contents(Nodes) ->
@@ -321,6 +322,10 @@ extract_contents(Nodes) ->
                   {size, "Size", integer},
                   {storage_class, "StorageClass", text},
                   {owner, "Owner", fun extract_user/1}],
+    [erlcloud_xml:decode(Attributes, Node) || Node <- Nodes].
+
+extract_common_prefixes(Nodes) ->
+    Attributes = [{prefix, "Prefix", text}],
     [erlcloud_xml:decode(Attributes, Node) || Node <- Nodes].
 
 extract_user([Node]) ->

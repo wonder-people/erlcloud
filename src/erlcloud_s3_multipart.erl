@@ -20,8 +20,7 @@
          upload_id/1,
          upload_part/5,
          upload_part/6,
-         upload_parts/6,
-         uploads_to_term/1]).
+         upload_parts/6]).
 
 -include_lib("erlcloud/include/erlcloud.hrl").
 -include_lib("erlcloud/include/erlcloud_aws.hrl").
@@ -125,9 +124,28 @@ upload_id(Xml) ->
       filter_content_elements(Xml#xmlElement.content, 'UploadId')).
 
 %% @doc List all the active multipart uploads for a bucket
--spec list_uploads(string(), proplist(), aws_config()) -> [string()].
-list_uploads(BucketName, _Options, Config) ->
-    erlcloud_s3:s3_xml_request(Config, get, BucketName, "/", ["uploads"], [], [], []).
+-spec list_uploads(string(), proplist(), aws_config()) -> proplist().
+list_uploads(BucketName, Options, Config) when is_list(BucketName),
+                                               is_list(Options) ->
+    %% erlcloud_s3:s3_xml_request(Config, get, BucketName, "/", ["uploads"], [], [], []).
+    Params = [{"delimiter", proplists:get_value(delimiter, Options)},
+              {"key-marker", proplists:get_value(key_marker, Options)},
+              {"upload-id-marker", proplists:get_value(upload_id_marker, Options)},
+              {"max-uploads", proplists:get_value(max_uploads, Options)},
+              {"prefix", proplists:get_value(prefix, Options)}],
+    Doc = erlcloud_s3:s3_xml_request(Config, get, BucketName, "/", ["uploads"], Params, <<>>, []),
+    Attributes = [{bucket, "Bucket", text},
+                  {prefix, "Prefix", text},
+                  {key_marker, "KeyMarker", text},
+                  {upload_id_marker, "UploadIdMarker", text},
+                  {next_key_marker, "NextKeyMarker", text},
+                  {next_upload_id_marker, "NextUploadIdMarker", text},
+                  {delimiter, "Delimiter", text},
+                  {max_uploads, "MaxUploads", integer},
+                  {is_truncated, "IsTruncated", boolean},
+                  {uploads, "Upload", fun extract_uploads/1},
+                  {common_prefixes, "CommonPrefixes", fun extract_common_prefixes/1}],
+    erlcloud_xml:decode(Attributes, Doc).
 
 %% @doc List all the parts for a multipart upload
 -spec list_parts(string(), string(), string(), proplist(), aws_config()) -> [string()].
@@ -150,14 +168,6 @@ parts_to_term(Xml) ->
     ElementNames = ['Bucket', 'Key', 'UploadId', 'Part'],
     Elements = filter_content_elements(Xml#xmlElement.content, ElementNames),
     parts_to_term(Elements, {[], [], [], []}).
-
-%% @doc Convert the response XML from a `List Multipart Uploads'
-%% request to an erlang term
--spec uploads_to_term(term()) -> term().
-uploads_to_term(Xml) ->
-    ElementNames = ['Bucket', 'Upload'],
-    Elements = filter_content_elements(Xml#xmlElement.content, ElementNames),
-    uploads_to_term(Elements, {[], []}).
 
 %% ===================================================================
 %% Internal functions
@@ -290,28 +300,20 @@ part_element_to_term([Element | RestElements], {PartNum, Etag, _}) when Element#
     Size = get_element_value(Element),
     part_element_to_term(RestElements, {PartNum, Etag, Size}).
 
--spec uploads_to_term([#xmlElement{}], {string(), [term()]}) -> proplist().
-uploads_to_term([], {Bucket, Uploads}) ->
-    [{bucket, Bucket}, {uploads, Uploads}];
-uploads_to_term([Element | RestElements], {_, Uploads}) when Element#xmlElement.name =:= 'Bucket' ->
-    Bucket = get_element_value(Element),
-    uploads_to_term(RestElements, {Bucket, Uploads});
-uploads_to_term([Element | RestElements], {Bucket, Uploads}) ->
-    UploadInfo = upload_element_to_term(Element),
-    uploads_to_term(RestElements, {Bucket, [UploadInfo | Uploads]}).
+extract_uploads(Nodes) ->
+    Attributes = [{key, "Key", text},
+                  {upload_id, "UploadId", text},
+                  {storage_class, "StorageClass", text},
+                  {initiated, "Initiated", time},
+                  {initiator, "Initiator", fun extract_user/1},
+                  {owner, "Owner", fun extract_user/1}],
+    [erlcloud_xml:decode(Attributes, Node) || Node <- Nodes].
 
--spec upload_element_to_term(#xmlElement{}) -> {string(), proplist()}.
-upload_element_to_term(Element) ->
-    ElementNames = ['Key', 'UploadId'],
-    Elements = filter_content_elements(Element#xmlElement.content, ElementNames),
-    upload_element_to_term(Elements, {[], []}).
+extract_common_prefixes(Nodes) ->
+    Attributes = [{prefix, "Prefix", text}],
+    [erlcloud_xml:decode(Attributes, Node) || Node <- Nodes].
 
--spec upload_element_to_term([#xmlElement{}], {string(), string()}) -> {string(), proplist()}.
-upload_element_to_term([], {Key, UploadId}) ->
-    {UploadId, [{key, Key}]};
-upload_element_to_term([Element | RestElements], {_, UploadId}) when Element#xmlElement.name =:= 'Key' ->
-    Key = get_element_value(Element),
-    upload_element_to_term(RestElements, {Key, UploadId});
-upload_element_to_term([Element | RestElements], {Key, _}) when Element#xmlElement.name =:= 'UploadId' ->
-    UploadId = get_element_value(Element),
-    upload_element_to_term(RestElements, {Key, UploadId}).
+extract_user([Node]) ->
+    Attributes = [{id, "ID", text},
+                  {display_name, "DisplayName", optional_text}],
+    erlcloud_xml:decode(Attributes, Node).

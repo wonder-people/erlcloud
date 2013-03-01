@@ -436,7 +436,8 @@ get_object(BucketName, Key, Options, Config) ->
      {content_type, proplists:get_value("content-type", Headers)},
      {delete_marker, list_to_existing_atom(proplists:get_value("x-amz-delete-marker", Headers, "false"))},
      {version_id, proplists:get_value("x-amz-version-id", Headers, "null")},
-     {content, Body}|
+     {content, Body},
+     {headers, Headers} |
      extract_metadata(Headers)].
 
 -spec get_object_acl(string(), string()) -> proplist().
@@ -497,7 +498,9 @@ get_object_metadata(BucketName, Key, Options, Config) ->
      {content_length, proplists:get_value("content-length", Headers)},
      {content_type, proplists:get_value("content-type", Headers)},
      {delete_marker, list_to_existing_atom(proplists:get_value("x-amz-delete-marker", Headers, "false"))},
-     {version_id, proplists:get_value("x-amz-version-id", Headers, "false")}|extract_metadata(Headers)].
+     {version_id, proplists:get_value("x-amz-version-id", Headers, "false")},
+     {headers, Headers} |
+     extract_metadata(Headers)].
 
 extract_metadata(Headers) ->
     [{Key, Value} || {["x-amz-meta-"|Key], Value} <- Headers].

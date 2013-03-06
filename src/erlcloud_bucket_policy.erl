@@ -24,7 +24,7 @@ term_to_json(Policy) ->
                                      proplists:get_value(statements, Policy, []))},
     JsonTerms = [{Key, Value} || {Key, Value} <- [Version, Id, Issuer, Statements],
                                  Value /= undefined],
-    binary_to_list(iolist_to_binary(mochijson2:encode({struct, JsonTerms}))).
+    binary_to_list(iolist_to_binary(erlcloud_mochijson2:encode({struct, JsonTerms}))).
 
 -spec statements_to_json([term()]) -> undefined | [term()].
 statements_to_json([]) ->

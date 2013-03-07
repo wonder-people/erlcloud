@@ -12,8 +12,47 @@
 -define(POLICY_VERSION, <<"2008-10-17">>).
 
 -spec json_to_term(string()) -> term().
-json_to_term(_JSON) ->
-    ok.
+json_to_term(Json) ->
+    {struct, Term} = erlcloud_mochijson2:decode(Json),
+    Id = {id, proplists:get_value(<<"Id">>, Term, undefined)},
+    Version = {version, proplists:get_value(<<"Version">>, Term, ?POLICY_VERSION)},
+    Issuer = {issuer, proplists:get_value(<<"Issuer">>, Term, undefined)},
+
+    Statements = {statements, json_statements_to_term(proplists:get_value(<<"Statement">>, Term, []))},
+    Terms = [{Key, Value} || {Key, Value} <- [Version, Id, Issuer, Statements],
+                            Value /= undefined],
+    Terms.
+
+-spec json_statements_to_term(list(tuple(struct, list()))) -> term().
+json_statements_to_term([{struct, Json}]) ->
+    Sid = {sid, proplists:get_value(<<"Sid">>, Json, undefined)},
+    Action = {action, proplists:get_value(<<"Action">>, Json, [])},
+    NotAction = {notaction, proplists:get_value(<<"NotAction">>, Json, undefined)},
+    Effect = {effect, proplists:get_value(<<"Effect">>, Json, undefined)},
+
+    Resource = {resource, proplists:get_value(<<"Resource">>, Json, undefined)},
+
+    Condition = {conditions, json_conditions_to_term(proplists:get_value(<<"Condition">>, Json, undefined))},
+    Principal = {principal, json_principal_to_term(proplists:get_value(<<"Principal">>, Json, undefined))},
+    Terms = [{Key, Value} || {Key, Value} <- [Sid,
+                                              Action,
+                                              NotAction,
+                                              Effect,
+                                              Resource,
+                                              Condition,
+                                              Principal],
+                                 Value /= undefined],
+    [Terms].
+
+-spec json_conditions_to_term(tuple(struct, list())) -> list(tuple()).
+json_conditions_to_term({struct, Conditions}) ->
+    [{Condition, Key, Value} || {Condition, {struct, [{Key, Value}]}} <- Conditions].
+
+-spec json_principal_to_term(tuple(struct, list())) -> string().
+json_principal_to_term({struct, [{<<"AWS">>, [Principal]}]}) ->
+    Principal;
+json_principal_to_term({struct, [{<<"AWS">>, Principal}]}) ->
+    Principal.
 
 -spec term_to_json(term()) -> string().
 term_to_json(Policy) ->
@@ -75,8 +114,8 @@ principal_to_json(Principal) ->
 -ifdef(TEST).
 
 term_to_json_test() ->
-    ExpectedPolicy = "{\"Version\":\"2008-10-17\",\"Id\":\"Policy123\",\"Statement\":[{\"Sid\":\"Stmt345\",\"Action\":[\"s3:CreateBucket\",\"s3:DeleteBucket\"],\"Effect\":\"Allow\",\"Resource\":\"arn:aws:s3:::test_bucket/*\",\"Condition\":{\"IpAddress\":{\"aws:SourceIp\":[\"127.0.0.1\",\"192.168.1.1\"]}},\"Principal\":{\"AWS\":[\"*.*\"]}}]}",
-    Statements = [[{sid, <<"Stmt345">>},
+    JsonPolicy = "{\"Version\":\"2008-10-17\",\"Id\":\"Policy123\",\"Statement\":[{\"Sid\":\"Stmt345\",\"Action\":[\"s3:CreateBucket\",\"s3:DeleteBucket\"],\"Effect\":\"Allow\",\"Resource\":\"arn:aws:s3:::test_bucket/*\",\"Condition\":{\"IpAddress\":{\"aws:SourceIp\":[\"127.0.0.1\",\"192.168.1.1\"]}},\"Principal\":{\"AWS\":[\"*.*\"]}}]}",
+    TermStatements = [[{sid, <<"Stmt345">>},
                    {action, [<<"s3:CreateBucket">>, <<"s3:DeleteBucket">>]},
                    {effect, <<"Allow">>},
                    {resource, <<"arn:aws:s3:::test_bucket/*">>},
@@ -84,9 +123,27 @@ term_to_json_test() ->
                                 <<"aws:SourceIp">>,
                                 [<<"127.0.0.1">>, <<"192.168.1.1">>]}]},
                    {principal, <<"*.*">>}]],
-    Policy = [{id, <<"Policy123">>},
+    TermPolicy = [{id, <<"Policy123">>},
               {version, ?POLICY_VERSION},
-              {statements, Statements}],
-    ?assertEqual(ExpectedPolicy, term_to_json(Policy)).
+              {statements, TermStatements}],
+    ?assertEqual(JsonPolicy, term_to_json(TermPolicy)),
+    assert_policy_term(TermPolicy, json_to_term(JsonPolicy)).
+
+assert_policy_term(PolicyTerm1, PolicyTerm2) ->
+    [assert_prop(PolicyTerm1, PolicyTerm2, Key)|| Key <- [id, version]],
+    assert_statements(
+            proplists:get_value(statements, PolicyTerm1),
+            proplists:get_value(statements, PolicyTerm2)).
+
+assert_statements([StateTerm1], [StateTerm2]) ->
+    [assert_prop(StateTerm1, StateTerm2, Key)|| Key <- [sid,
+                                                        action,
+                                                        effect,
+                                                        resource,
+                                                        conditions,
+                                                        principal]].
+
+assert_prop(Prop1, Prop2, Key) ->
+    ?assertEqual(proplists:get_value(Key, Prop1), proplists:get_value(Key, Prop2)).
 
 -endif.

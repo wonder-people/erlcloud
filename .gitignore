@@ -3,3 +3,5 @@
 _build
 ebin/*.beam
 ebin/*.app
+.eunit/
+erl_crash.dump

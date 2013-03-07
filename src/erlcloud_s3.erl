@@ -27,6 +27,10 @@
 -include_lib("erlcloud/include/erlcloud_aws.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -spec new(string(), string()) -> aws_config().
 new(AccessKeyID, SecretAccessKey) ->
     #aws_config{
@@ -344,6 +348,9 @@ get_bucket_attribute(BucketName, AttributeName) ->
 
 -spec get_bucket_attribute(string(), s3_bucket_attribute_name(), aws_config()) -> term().
 
+get_bucket_attribute(BucketName, policy, Config) ->
+        {_Headers, Body} = s3_request(Config, get, BucketName, "/", ["policy"], [], <<>>, []),
+        erlcloud_bucket_policy:json_to_term(Body);
 get_bucket_attribute(BucketName, AttributeName, Config)
   when is_list(BucketName), is_atom(AttributeName) ->
     Attr = case AttributeName of
@@ -353,7 +360,7 @@ get_bucket_attribute(BucketName, AttributeName, Config)
                request_payment -> "requestPayment";
                versioning      -> "versioning"
            end,
-    Doc = s3_xml_request(Config, get, BucketName, "/", Attr, [], <<>>, []),
+    Doc = s3_xml_request(Config, get, BucketName, "/", [Attr], [], <<>>, []),
     case AttributeName of
         acl ->
             Attributes = [{owner, "Owner", fun extract_user/1},
@@ -735,7 +742,7 @@ set_bucket_attribute(BucketName, AttributeName, Value, Config)
                             [{'ID', [proplists:get_value(id, proplists:get_value(owner, Value))]},
                              {'DisplayName', [proplists:get_value(display_name, proplists:get_value(owner, Value))]}]},
                            {'AccessControlList', encode_grants(proplists:get_value(access_control_list, Value))}]},
-                {"acl", "application/xml", encode_xml_request(ACLXML)};
+                {["acl"], "application/xml", encode_xml_request(ACLXML)};
             logging ->
                 LoggingXML = {'BucketLoggingStatus',
                               [{xmlns, ?XMLNS_S3}],
@@ -751,7 +758,7 @@ set_bucket_attribute(BucketName, AttributeName, Value, Config)
                                   false ->
                                       []
                               end},
-                {"logging", "application/xml", encode_xml_request(LoggingXML)};
+                {["logging"], "application/xml", encode_xml_request(LoggingXML)};
             request_payment ->
                 PayerName = case Value of
                                 requester -> "Requester";
@@ -762,7 +769,7 @@ set_bucket_attribute(BucketName, AttributeName, Value, Config)
                           {'Payer', [PayerName]}
                          ]
                         },
-                {"requestPayment", "application/xml", encode_xml_request(RPXML)};
+                {["requestPayment"], "application/xml", encode_xml_request(RPXML)};
             versioning ->
                 Status = case proplists:get_value(status, Value) of
                              suspended -> "Suspended";
@@ -775,10 +782,10 @@ set_bucket_attribute(BucketName, AttributeName, Value, Config)
                 VersioningXML = {'VersioningConfiguration', [{xmlns, ?XMLNS_S3}],
                                  [{'Status', [Status]},
                                   {'MfaDelete', [MFADelete]}]},
-                {"versioning", "application/xml", encode_xml_request(VersioningXML)};
+                {["versioning"], "application/xml", encode_xml_request(VersioningXML)};
             policy ->
                 PolicyJSON = erlcloud_bucket_policy:term_to_json(Value),
-                {"policy", "application/json", PolicyJSON}
+                {["policy"], "application/json", PolicyJSON}
         end,
     Headers = [{"content-type", ContentType}],
     s3_simple_request(Config, put, BucketName, "/", Subresource, [], POSTData, Headers).
@@ -910,3 +917,81 @@ port_spec(#aws_config{s3_port=80}) ->
     "";
 port_spec(#aws_config{s3_port=Port}) ->
     [":", erlang:integer_to_list(Port)].
+
+%% ===================================================================
+%% Eunit tests
+%% ===================================================================
+
+-ifdef(TEST).
+
+get_bucket_attribute_test_() ->
+    {setup,
+        fun test_setup/0,
+        fun test_cleanup/1,
+        fun test_bucket_policy/1
+    }.
+
+test_setup() -> 
+    erlcloud:start(),
+    BucketName = "erlcloud-s3-test-" ++ rand_string(),
+    create_bucket(BucketName),
+    BucketName.
+
+test_cleanup(BucketName) ->
+    delete_bucket(BucketName),
+    application:stop(erlcloud).
+
+test_bucket_policy(BucketName) ->
+    ?assert(validate_configure()),
+    Statements = [[{sid, <<"Stmt345">>},
+                   {action, <<"s3:GetObject">>},
+                   {effect, <<"Allow">>},
+                   {resource, list_to_binary("arn:aws:s3:::" ++ BucketName ++ "/*")},
+                   {conditions, [{<<"IpAddress">>,
+                                <<"aws:SourceIp">>,
+                                [<<"127.0.0.1/32">>, <<"192.168.1.1/32">>]}]},
+                   {principal, <<"*">>}
+                   ]],
+    Policy = [{id, <<"Policy123">>},
+              {version, <<"2008-10-17">>},
+              {statements, Statements}],
+    ok = set_bucket_attribute(BucketName, policy, Policy),
+    GotPolicy = get_bucket_attribute(BucketName, policy),
+    assert_policy_term(Policy, GotPolicy).
+
+assert_policy_term(PolicyTerm1, PolicyTerm2) ->
+    [assert_prop(PolicyTerm1, PolicyTerm2, Key)|| Key <- [id, version]],
+    assert_statements(
+            proplists:get_value(statements, PolicyTerm1),
+            proplists:get_value(statements, PolicyTerm2)).
+
+assert_statements([StateTerm1], [StateTerm2]) ->
+    [assert_prop(StateTerm1, StateTerm2, Key)|| Key <- [sid,
+                                                        action,
+                                                        effect,
+                                                        resource,
+                                                        conditions,
+                                                        principal]].
+
+assert_prop(Prop1, Prop2, Key) ->
+    ?assertEqual(proplists:get_value(Key, Prop1), proplists:get_value(Key, Prop2)).
+
+rand_string() ->
+    [lists:nth(crypto:rand_uniform(1, 17), "1234567890abcdef")
+        || _<-lists:seq(1, 10)].
+
+validate_configure() ->
+    case has_env("AWS_ACCESS_KEY_ID") andalso has_env("AWS_SECRET_ACCESS_KEY") of
+        false ->
+            ?debugMsg("AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY not found."),
+            false;
+        _  ->  true
+    end.
+
+has_env(EnvName) ->
+    case os:getenv(EnvName) of
+        false -> false;
+        _ -> true
+    end.
+
+-endif.

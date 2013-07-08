@@ -78,7 +78,7 @@ new(AccessKeyID, SecretAccessKey, Host, Port, Protocol, ProxyHost, ProxyPort,
      s3_host=Host,
      s3_port=Port,
      s3_prot=Protocol,
-     http_options=[{proxy, {{ProxyHost, ProxyPort}, []}}] ++ HttpOptions
+     http_options=[{proxy_host, ProxyHost}, {proxy_port, ProxyPort}] ++ HttpOptions
     }.
 
 -spec configure(string(), string()) -> ok.
@@ -430,7 +430,7 @@ get_object(BucketName, Key, Options, Config) ->
                       undefined -> "";
                       Version   -> [{"versionId", Version}]
                   end,
-    {Headers, Body} = s3_request(Config, get, BucketName, [$/|Key], Subresource, [], <<>>, RequestHeaders, [{body_format, binary}]),
+    {Headers, Body} = s3_request(Config, get, BucketName, [$/|Key], Subresource, [], <<>>, RequestHeaders, [{response_format, binary}]),
     [{etag, proplists:get_value("etag", Headers)},
      {content_length, proplists:get_value("content-length", Headers)},
      {content_type, proplists:get_value("content-type", Headers)},
@@ -851,18 +851,29 @@ s3_request(Config, Method, Host, Path, Subresources, Params, POSTData, Headers, 
                                     true -> [$&, erlcloud_http:make_query_string(Params)]
                                 end
                                ]),
-    httpc:set_options(Config#aws_config.http_options),
+    %%httpc:set_options(Config#aws_config.http_options),
+    Options = Config#aws_config.http_options,
     Response = case Method of
-                   get -> httpc:request(Method, {RequestURI, RequestHeaders}, [], GetOptions);
-                   delete -> httpc:request(Method, {RequestURI, RequestHeaders}, [], []);
-                   _ -> httpc:request(Method, {RequestURI, RequestHeaders, ContentType, Body}, [], [])
+                   get -> 
+                       ibrowse:send_req(RequestURI, RequestHeaders, Method, [], 
+                                        Options ++ GetOptions);
+                   delete -> 
+                       ibrowse:send_req(RequestURI, RequestHeaders, Method,
+                                       [], Options);
+                   _ -> 
+                       io:format("RequestURI= ~p~n Method = ~p~n", [RequestURI, Method]),
+                       ibrowse:send_req(RequestURI, RequestHeaders, Method, Body,
+                                     Options)
                end,
     case Response of
-        {ok, {{_HTTPVer, OKStatus, _StatusLine}, ResponseHeaders, ResponseBody}}
-          when OKStatus >= 200, OKStatus =< 299 ->
-            {ResponseHeaders, ResponseBody};
-        {ok, {{_HTTPVer, Status, _StatusLine}, _ResponseHeaders, _ResponseBody}} ->
-            erlang:error({aws_error, {http_error, Status, _StatusLine, _ResponseBody}});
+        {ok, Status, ResponseHeaders, ResponseBody} ->
+             S = list_to_integer(Status),
+             case S >= 200 andalso S =< 299 of
+                 true ->
+                     {ResponseHeaders, ResponseBody};
+                 false ->
+                     erlang:error({aws_error, {http_error, S, "", ResponseBody}})
+             end;
         {error, Error} ->
             erlang:error({aws_error, {socket_error, Error}})
     end.
@@ -881,6 +892,7 @@ make_authorization(Config, Method, ContentMD5, ContentType, Date, AmzHeaders,
                     format_subresources(Subresources)
 
                    ],
+    io:format("StringToSign = ~p~n", [StringToSign]),
     Signature = base64:encode(crypto:sha_mac(Config#aws_config.secret_access_key, StringToSign)),
     ["AWS ", Config#aws_config.access_key_id, $:, Signature].
 

@@ -861,8 +861,8 @@ s3_request(Config, Method, Host, Path, Subresources, Params, POSTData, Headers, 
                        ibrowse:send_req(RequestURI, RequestHeaders, Method,
                                        [], Options);
                    _ -> 
-                       io:format("RequestURI= ~p~n Method = ~p~n", [RequestURI, Method]),
-                       ibrowse:send_req(RequestURI, RequestHeaders, Method, Body,
+                       NewHeaders = [{"content-type", ContentType} | RequestHeaders],
+                       ibrowse:send_req(RequestURI, NewHeaders, Method, Body,
                                      Options)
                end,
     case Response of

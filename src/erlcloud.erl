@@ -4,6 +4,7 @@
 -define(APP, erlcloud).
 
 start() ->
+    application:start(ibrowse),
     application:load(?APP),
     {ok, Apps} = application:get_key(?APP, applications),
     [application:start(App) || App <- Apps],

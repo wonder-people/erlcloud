@@ -851,7 +851,6 @@ s3_request(Config, Method, Host, Path, Subresources, Params, POSTData, Headers, 
                                     true -> [$&, erlcloud_http:make_query_string(Params)]
                                 end
                                ]),
-    %%httpc:set_options(Config#aws_config.http_options),
     Options = Config#aws_config.http_options,
     Response = case Method of
                    get -> 

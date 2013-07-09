@@ -851,18 +851,19 @@ s3_request(Config, Method, Host, Path, Subresources, Params, POSTData, Headers, 
                                     true -> [$&, erlcloud_http:make_query_string(Params)]
                                 end
                                ]),
+    Timeout = 60000,
     Options = Config#aws_config.http_options,
     Response = case Method of
                    get -> 
                        ibrowse:send_req(RequestURI, RequestHeaders, Method, [], 
-                                        Options ++ GetOptions);
+                                        Options ++ GetOptions, Timeout);
                    delete -> 
                        ibrowse:send_req(RequestURI, RequestHeaders, Method,
-                                       [], Options);
+                                       [], Options, Timeout);
                    _ -> 
                        NewHeaders = [{"content-type", ContentType} | RequestHeaders],
                        ibrowse:send_req(RequestURI, NewHeaders, Method, Body,
-                                     Options, 60000)
+                                     Options, Timeout)
                end,
     case Response of
         {ok, Status, ResponseHeaders, ResponseBody} ->

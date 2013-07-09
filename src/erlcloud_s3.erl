@@ -78,7 +78,10 @@ new(AccessKeyID, SecretAccessKey, Host, Port, Protocol, ProxyHost, ProxyPort,
      s3_host=Host,
      s3_port=Port,
      s3_prot=Protocol,
-     http_options=[{proxy_host, ProxyHost}, {proxy_port, ProxyPort}] ++ HttpOptions
+     http_options=[{proxy_host, ProxyHost}, {proxy_port, ProxyPort}, 
+                   {max_sessions, 50}, {max_pipeline_size, 1}, 
+                   {connect_timeout, 5000}, {inactivity_timeout, 60000}]
+                  ++ HttpOptions
     }.
 
 -spec configure(string(), string()) -> ok.

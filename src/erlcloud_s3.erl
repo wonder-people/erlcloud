@@ -431,9 +431,9 @@ get_object(BucketName, Key, Options, Config) ->
                       Version   -> [{"versionId", Version}]
                   end,
     {Headers, Body} = s3_request(Config, get, BucketName, [$/|Key], Subresource, [], <<>>, RequestHeaders, [{response_format, binary}]),
-    [{etag, proplists:get_value("etag", Headers)},
-     {content_length, proplists:get_value("content-length", Headers)},
-     {content_type, proplists:get_value("content-type", Headers)},
+    [{etag, proplists:get_value("ETag", Headers)},
+     {content_length, proplists:get_value("Content-Length", Headers)},
+     {content_type, proplists:get_value("Content-Type", Headers)},
      {delete_marker, list_to_existing_atom(proplists:get_value("x-amz-delete-marker", Headers, "false"))},
      {version_id, proplists:get_value("x-amz-version-id", Headers, "null")},
      {content, Body},
@@ -863,7 +863,7 @@ s3_request(Config, Method, Host, Path, Subresources, Params, POSTData, Headers, 
                    _ -> 
                        NewHeaders = [{"content-type", ContentType} | RequestHeaders],
                        ibrowse:send_req(RequestURI, NewHeaders, Method, Body,
-                                     Options)
+                                     Options, 60000)
                end,
     case Response of
         {ok, Status, ResponseHeaders, ResponseBody} ->
@@ -872,6 +872,7 @@ s3_request(Config, Method, Host, Path, Subresources, Params, POSTData, Headers, 
                  true ->
                      {ResponseHeaders, ResponseBody};
                  false ->
+                     io:format("RESP HEADERS = ~p~n", [ResponseHeaders]),
                      erlang:error({aws_error, {http_error, S, "", ResponseBody}})
              end;
         {error, Error} ->
@@ -892,7 +893,6 @@ make_authorization(Config, Method, ContentMD5, ContentType, Date, AmzHeaders,
                     format_subresources(Subresources)
 
                    ],
-    io:format("StringToSign = ~p~n", [StringToSign]),
     Signature = base64:encode(crypto:sha_mac(Config#aws_config.secret_access_key, StringToSign)),
     ["AWS ", Config#aws_config.access_key_id, $:, Signature].
 

@@ -872,7 +872,6 @@ s3_request(Config, Method, Host, Path, Subresources, Params, POSTData, Headers, 
                  true ->
                      {ResponseHeaders, ResponseBody};
                  false ->
-                     io:format("RESP HEADERS = ~p~n", [ResponseHeaders]),
                      erlang:error({aws_error, {http_error, S, "", ResponseBody}})
              end;
         {error, Error} ->

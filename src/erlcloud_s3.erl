@@ -78,9 +78,9 @@ new(AccessKeyID, SecretAccessKey, Host, Port, Protocol, ProxyHost, ProxyPort,
      s3_host=Host,
      s3_port=Port,
      s3_prot=Protocol,
-     http_options=[{proxy_host, ProxyHost}, {proxy_port, ProxyPort}, 
-                   {max_sessions, 50}, {max_pipeline_size, 1}, 
-                   {connect_timeout, 5000}, {inactivity_timeout, 60000}]
+     http_options=[{proxy_host, ProxyHost}, {proxy_port, ProxyPort},
+                   {max_sessions, 50}, {max_pipeline_size, 1},
+                   {connect_timeout, 5000}, {inactivity_timeout, 240000}]
                   ++ HttpOptions
     }.
 
@@ -854,16 +854,16 @@ s3_request(Config, Method, Host, Path, Subresources, Params, POSTData, Headers, 
                                     true -> [$&, erlcloud_http:make_query_string(Params)]
                                 end
                                ]),
-    Timeout = 60000,
+    Timeout = 240000,
     Options = Config#aws_config.http_options,
     Response = case Method of
-                   get -> 
-                       ibrowse:send_req(RequestURI, RequestHeaders, Method, [], 
+                   get ->
+                       ibrowse:send_req(RequestURI, RequestHeaders, Method, [],
                                         Options ++ GetOptions, Timeout);
-                   delete -> 
+                   delete ->
                        ibrowse:send_req(RequestURI, RequestHeaders, Method,
                                        [], Options, Timeout);
-                   _ -> 
+                   _ ->
                        NewHeaders = [{"content-type", ContentType} | RequestHeaders],
                        ibrowse:send_req(RequestURI, NewHeaders, Method, Body,
                                      Options, Timeout)

@@ -318,6 +318,7 @@ list_objects(BucketName, Options, Config)
                   {delimiter, "Delimiter", text},
                   {max_keys, "MaxKeys", integer},
                   {is_truncated, "IsTruncated", boolean},
+                  {next_marker, "NextMarker", text},
                   {contents, "Contents", fun extract_contents/1},
                   {common_prefixes, "CommonPrefixes", fun extract_common_prefixes/1}],
     erlcloud_xml:decode(Attributes, Doc).

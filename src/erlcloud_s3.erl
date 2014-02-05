@@ -14,6 +14,7 @@
          delete_object/2, delete_object/3,
          delete_object_version/3, delete_object_version/4,
          get_object/2, get_object/3, get_object/4,
+         head_object/2, head_object/3, head_object/4,
          get_object_acl/2, get_object_acl/3, get_object_acl/4,
          get_object_torrent/2, get_object_torrent/3,
          get_object_metadata/2, get_object_metadata/3, get_object_metadata/4,
@@ -423,6 +424,25 @@ get_object(BucketName, Key, Options) ->
 -spec get_object(string(), string(), proplist(), aws_config()) -> proplist().
 
 get_object(BucketName, Key, Options, Config) ->
+    fetch_object(get, BucketName, Key, Options, Config).
+
+-spec head_object(string(), string()) -> proplist().
+head_object(BucketName, Key) ->
+    head_object(BucketName, Key, []).
+
+-spec head_object(string(), string(), proplist() | aws_config()) -> proplist().
+head_object(BucketName, Key, Config)
+  when is_record(Config, aws_config) ->
+    head_object(BucketName, Key, [], Config);
+head_object(BucketName, Key, Options) ->
+    head_object(BucketName, Key, Options, default_config()).
+
+-spec head_object(string(), string(), proplist(), aws_config()) -> proplist().
+head_object(BucketName, Key, Options, Config) ->
+    fetch_object(head, BucketName, Key, Options, Config).
+
+-spec fetch_object(atom(), string(), string(), proplist(), aws_config()) -> proplist().
+fetch_object(Method, BucketName, Key, Options, Config) ->
     RequestHeaders = [{"Range", proplists:get_value(range, Options)},
                       {"Accept", proplists:get_value(accept, Options)},
                       {"If-Modified-Since", proplists:get_value(if_modified_since, Options)},
@@ -433,7 +453,7 @@ get_object(BucketName, Key, Options, Config) ->
                       undefined -> "";
                       Version   -> [{"versionId", Version}]
                   end,
-    {Headers, Body} = s3_request(Config, get, BucketName, [$/|Key], Subresource, [], <<>>, RequestHeaders, [{response_format, binary}]),
+    {Headers, Body} = s3_request(Config, Method, BucketName, [$/|Key], Subresource, [], <<>>, RequestHeaders, [{response_format, binary}]),
     [{etag, proplists:get_value("ETag", Headers)},
      {content_length, proplists:get_value("Content-Length", Headers)},
      {content_type, proplists:get_value("Content-Type", Headers)},

@@ -19,6 +19,7 @@
          get_object_torrent/2, get_object_torrent/3,
          get_object_metadata/2, get_object_metadata/3, get_object_metadata/4,
          put_object/3, put_object/4, put_object/5, put_object/6,
+	 put_object_img_jpeg/5,put_object_img_jpeg/6,
          put_multipart_object/6, put_multipart_file/5,
          set_object_acl/3, set_object_acl/4,
          make_link/3, make_link/4,
@@ -637,6 +638,29 @@ put_object(BucketName, Key, Value, Options, HTTPHeaders, Config)
         ++ [{["x-amz-meta-"|string:to_lower(MKey)], MValue} ||
                {MKey, MValue} <- proplists:get_value(meta, Options, [])],
     ContentType = proplists:get_value("content-type", HTTPHeaders, "application/octet_stream"),
+    ReturnResponse = proplists:get_value(return_response, Options, false),
+    POSTData = {iolist_to_binary(Value), ContentType},
+    {Headers, Body} = s3_request(Config, put, BucketName, [$/|Key], [], [],
+                                 POSTData, RequestHeaders),
+    case ReturnResponse of
+        true ->
+            {Headers, Body};
+        false ->
+            [{version_id, proplists:get_value("x-amz-version-id", Headers, "null")}]
+    end.
+
+
+put_object_img_jpeg(BucketName, Key, Value, Options, Config)
+  when is_record(Config, aws_config) ->
+    put_object_img_jpeg(BucketName, Key, Value, Options, [], Config).
+
+put_object_img_jpeg(BucketName, Key, Value, Options, HTTPHeaders, Config) 
+  when is_list(BucketName), is_list(Key), is_list(Value) orelse is_binary(Value),
+       is_list(Options) ->
+    RequestHeaders = [{"x-amz-acl", encode_acl(proplists:get_value(acl, Options))}|HTTPHeaders]
+        ++ [{["x-amz-meta-"|string:to_lower(MKey)], MValue} ||
+               {MKey, MValue} <- proplists:get_value(meta, Options, [])],
+    ContentType = proplists:get_value("content-type", HTTPHeaders, "image/jpeg"),%%"application/octet_stream"),
     ReturnResponse = proplists:get_value(return_response, Options, false),
     POSTData = {iolist_to_binary(Value), ContentType},
     {Headers, Body} = s3_request(Config, put, BucketName, [$/|Key], [], [],
